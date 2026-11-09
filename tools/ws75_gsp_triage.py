@@ -24,8 +24,25 @@ FAILURES = [
     ("RM private state", r"rm_init_private_state FAILED"),
     ("MSI unavailable", r"no MSI source on the device"),
     ("GSP/adapter initialization", r"rm_init_adapter -> FAILED"),
-    ("BAR1 placement", r"bar1:.*(?:FAILED|refusing|cannot|unsafe|not placing)"),
+    ("BAR1 placement warning", r"bar1:.*(?:FAILED|refusing|cannot|unsafe)"),
 ]
+
+
+def split_attempts(log):
+    """Split log at each new NVRM PCI probe to avoid cross-boot false success."""
+    attempts = []
+    current = []
+    for line in log.splitlines():
+        if "NVRM-xnu:" not in line:
+            continue
+        if re.search(r"NVRM-xnu:\s*probe [0-9a-f]{4}:[0-9a-f]{4} class", line, re.I):
+            if current:
+                attempts.append(current)
+            current = []
+        current.append(line)
+    if current:
+        attempts.append(current)
+    return attempts
 
 
 def analyze(log):
@@ -50,8 +67,10 @@ def main(argv=None):
             log = Path(args.log).read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
             parser.error(str(exc))
-    stages, failures, count = analyze(log)
+    attempts = split_attempts(log)
+    stages, failures, count = analyze("\n".join(attempts[-1])) if attempts else analyze("")
     print("WS75 NVIDIA GSP startup — read-only evidence report")
+    print(f"Detected NVRM log segments: {len(attempts)} (showing latest segment only)")
     print(f"NVRM log lines: {count}")
     for name, observed in stages:
         print(f"  {'OBSERVED' if observed else 'NOT OBSERVED'}: {name}")
@@ -63,6 +82,8 @@ def main(argv=None):
         print("No GSP adapter success observed. Log may be partial or the driver may not have started.")
     elif stages[-1][1]:
         print("GSP adapter success message observed; display output and Metal remain unverified.")
+    if failures and stages[-1][1]:
+        print("WARNING: Success and failure signals coexist; inspect event order.")
     print("This report does not change EFI, SIP, AMFI, or driver state.")
     return 0
 
