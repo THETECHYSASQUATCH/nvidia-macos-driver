@@ -1,5 +1,7 @@
 # NullMoth NVIDIA Driver for macOS
 
+> **Fork attribution:** This repository is a development fork based on the `main` branch of [NullMoth's NVIDIA macOS driver](https://github.com/nullmoth/nvidia-macos-driver). The original project and its contributors retain credit for upstream work. WS75 / Quadro RTX 4000 experiments on `feature/quadro-rtx-4000-support` are independent, unverified development and are not an official upstream release. Existing third-party licenses and notices remain applicable.
+
 A Metal driver for NVIDIA GeForce cards on macOS 15 Sequoia (Intel Macs and OpenCore PCs). It is open source; the
 kernel extensions, the Metal plugin and the shader translator are in this repository. The 1401 app that installs it
 (Mac and Windows) is its own project: [1401](https://github.com/nullmoth/1401).
