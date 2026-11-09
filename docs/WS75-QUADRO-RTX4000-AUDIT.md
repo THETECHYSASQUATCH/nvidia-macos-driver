@@ -22,6 +22,18 @@ Status: **source-level audit only; hardware validation pending**. This is not a 
 | Laptop display | `docs/CARD-SUPPORT.md` explicitly says a supported PCI ID does not implement an Optimus mux. | High risk: establish which GPU owns the internal panel and external ports. |
 | OS/build | README documents macOS 26 support and a Tahoe-specific NVAccel build. | Source-level compatibility claim, not a tested WS75 build. |
 
+## Historical ACPI review — source documents located
+
+Read-only sources: earlier `MSI_WS75_ACPI_Reference.docx` / PDF and prior `Pasted text(4).txt` ACPI disassembly transcript. These are **summaries and logs**, not a complete parsed evaluation of every AML method or physical wiring.
+
+- Firmware DSDT: `MSI_NB / MEGABOOK`, 265,899 bytes; the reference records 1,647 methods, 203 devices and 230 operation regions.
+- Intel system-agent SSDT: `ssdt3.dat` / `SaSsdt`, 12,762 bytes, 88 methods and 17 devices. Method index includes `_DOS` (line 366), `_DOD` (line 378), and multiple `_DCS`, `_DGS`, `_DSS` methods for display output handling. These indicate firmware display enumeration/control, **not** proof of physical connector routing.
+- PCI Express graphics SSDT: `ssdt4.dat` / `PegSsdt`, 10,727 bytes, 56 methods and 19 operation regions. Indexed methods include `_DSM`, `_DSW`, `_PRW`, `_S0W`, `_INI`, and power-management helpers. Do not assume any specific GPU power state or mux semantics without examining method bodies.
+- Previous disassembly logs report `Device (GFX0)` and `Device (PEGP)` declarations in the DSDT, plus `_ON`/`_OFF` methods in several scopes. The Windows inventory maps Intel to `\\_SB.PCI0.GFX0` and Quadro to `\\_SB.PCI0.PEG0.PEGP`.
+- The prior OpenCore PNLF SSDT is scoped under `\\_SB.PCI0.GFX0`, which is consistent with Intel backlight support, but **does not prove** the internal LCD is physically Intel-only.
+
+**Unresolved:** inspect full DSDT/SSDT DSL method bodies, connector mapping (`_DOD` values and `_ADR` children), `PEGP` power/resource methods, any vendor mux control, and runtime display-to-GPU ownership. Avoid making an SSDT patch or disabling the Intel GPU based on names alone.
+
 ## Required read-only hardware inventory
 
 Run on **Windows PowerShell** (no driver installation):
