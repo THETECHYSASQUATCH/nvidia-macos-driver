@@ -45,5 +45,26 @@ class TestGspTriage(unittest.TestCase):
         self.assertIn("Unsupported RM/GSP device", [name for name, _ in failures])
 
 
+    def test_separate_boot_attempts(self):
+        log = (
+            "NVRM-xnu: probe 10de:1eb6 class 03.00 subsystem 1462:12b0\n"
+            "NVRM-xnu: PASS 2 REACHED: the adapter is up — GSP-RM is running\n"
+            "NVRM-xnu: probe 10de:1eb6 class 03.00 subsystem 1462:12b0\n"
+            "NVRM-xnu: rm_init_adapter -> FAILED\n"
+        )
+        attempts = triage.split_attempts(log)
+        self.assertEqual(len(attempts), 2)
+        stages, failures, _ = triage.analyze("\n".join(attempts[-1]))
+        self.assertFalse(stages[-1][1])
+        self.assertIn("GSP/adapter initialization", [name for name, _ in failures])
+
+    def test_benign_bar_not_placed_is_not_a_failure(self):
+        _, failures, _ = triage.analyze(
+            "NVRM-xnu: bar1: no Resizable BAR capability — BAR1 left as IOPCIFamily placed it\n"
+            "NVRM-xnu: bar1: BAR1 is 256 MB, console is not inside it — not placing\n"
+        )
+        self.assertFalse(failures)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
