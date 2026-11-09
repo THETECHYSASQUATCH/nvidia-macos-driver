@@ -6,14 +6,15 @@ Status: **source-level audit only; hardware validation pending**. This is not a 
 - MSI WS75 10TL laptop; Intel Core i7-10875H (Comet Lake), NVIDIA Quadro RTX 4000 mobile (Turing).
 - OpenCore, macOS 26 Tahoe x86_64, MacBookPro16,1 SMBIOS (reported target configuration).
 - Current working boot configuration has `-wegnoegpu`; **leave it in place** until a backed-up, reversible test boot is ready.
-- Exact NVIDIA PCI device ID, subsystem ID, PCI class, BAR layout, VBIOS/GSP state, and panel/output wiring are **not yet measured**.
+- **Previously recorded Windows PCI inventory:** NVIDIA Quadro RTX 4000 with Max-Q Design, `VEN_10DE&DEV_1EB6&SUBSYS_12B01462&REV_A1`, PCI `01:00.0`, class `0300`, ACPI `\\_SB.PCI0.PEG0.PEGP`. Intel UHD Graphics is `8086:9BC4` at `00:02.0` (`\\_SB.PCI0.GFX0`). NVIDIA audio function `10DE:10F8` at `01:00.1`; NVIDIA USB functions `10DE:1AD8` and `10DE:1AD9` at `01:00.2` and `01:00.3`. Evidence: earlier user-provided `WS75-PCI-Inventory.txt`; this is historical Windows enumeration, not a new macOS measurement.
+- **Still unverified:** laptop panel/output wiring, macOS PCI visibility, live BAR layout and firmware/GSP initialization.
 
 ## Source audit
 
 | Area | Evidence | Assessment |
 | --- | --- | --- |
 | PCI personality | `kexts/NVRM/Info.plist` matches vendor `10de` and PCI display base class `03`, including VGA `0300` and 3D controller `0302`. | No card-specific Info.plist change appears needed. |
-| Installer IDs | `package/install.sh` includes `1EB6` in its supported-ID table; the installer also includes a Turing-and-newer fallback. | Confirm actual device ID from this laptop; do not assume it is `1EB6`. |
+| Installer IDs | `package/install.sh` includes `1EB6` in its supported-ID table; the installer also includes a Turing-and-newer fallback. | **Confirmed** historical hardware ID `10DE:1EB6`; matches the installer table. |
 | NVIDIA support gate | `kexts/NVRM/NVRM.cpp` invokes `rm_is_supported_pci_device()` during probe and `rm_is_supported_device()` during initialization. | PCI matching alone does not establish successful RM/GSP initialization. |
 | Turing startup | `kexts/NVRM/NVRM.cpp` has Turing-specific settle handling, including ranges `0x1E00–0x1FFF` and `0x2180–0x21FF`. | Relevant path exists; timing must be validated on target hardware. |
 | Shader compiler | `plugin/NVMTLVendorCompiler.m` has chip-name-based SM target selection; `tools/test_card_support.py` exercises TU106 → SM 7.5. | Confirm whether the GPU reports TU104 or another chip identifier and that the fallback path works. |
@@ -49,8 +50,8 @@ For a more complete map, collect GPU PCI address, vendor/device/subsystem IDs, P
 
 ## Safe acceptance criteria for Step 1
 
-1. Identify exact GPU PCI vendor/device/subsystem ID and class on the WS75.
-2. Confirm the ID is in the installer table or passes the intended NVIDIA support gate.
+1. **Completed from prior Windows inventory:** GPU `10DE:1EB6`, subsystem `12B01462`, revision `A1`, PCI class `0300`, address `01:00.0`.
+2. **Completed (table only):** `1EB6` appears in the installer device table; live NVIDIA support-gate execution remains untested.
 3. Trace the Turing GSP/HAL and NVK shader-architecture selection paths for the reported chip.
 4. Determine laptop display routing and whether a direct NVIDIA-connected output exists.
 5. Run `python3 tools/test_card_support.py` on macOS with Xcode command-line tools; record results.
