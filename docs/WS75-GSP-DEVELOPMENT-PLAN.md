@@ -48,3 +48,42 @@ Run \`python3 tools/ws75_gsp_triage.py path/to/redacted-kernel.log\` only after 
 ## Security and upstream attribution
 
 This is experimental development based on NullMoth's upstream driver. Retain upstream notices and component licenses. Do not commit firmware binaries, private ACPI tables containing licensing data (e.g., MSDM), machine serial numbers, private keys, or unredacted logs. No changes to the live OpenCore EFI or security settings are part of this work.
+
+## Offline development follow-up (2026-11-09)
+
+The BAR1 placement guard now includes the GPU bus as well as reserved subordinate
+buses. The previous caller skipped the GPU bus, despite replacing the whole root
+port prefetchable window. On this WS75 that skipped functions 01:00.1/2/3. Presence
+of any other enumerated PCI function in the covered range now refuses relocation;
+it does not disable that function or change its BARs. This deliberately also
+refuses relocation for same-bus siblings whose BARs might not use that window:
+there is no per-sibling resource proof here. An unavailable registry iterator
+continues to refuse placement. Registry enumeration is not proof against late
+PCI enumeration or hotplug, so real boot validation remains required before merge.
+
+Source inspection of `kexts/NVRM/os-xnu2.cpp` identifies the firmware directory as
+`/Library/NullMoth/nvfw/nvidia/615.78.08/`. The TU10X firmware family maps to
+`gsp_tu10x.bin`, `gsp_log_tu10x.bin`, and `ucodes_tu10x.bin` by request type.
+The compiled identity table covers GSP (22,901,632 bytes) and ucodes (8,837,632
+bytes), using SHA-1 identities; it does not list the GSP log image. These are
+repository expectations, not confirmation that matching files are installed or
+that this machine can boot them. The separate offline auditor uses supplied
+SHA-256 manifests and does not establish RM version compatibility.
+
+`NVRM.cpp` requests firmware after private-state initialization, then requires
+an MSI interrupt source before `rm_init_adapter()`. Adapter failure returns before
+`fAdapter` and pass 2 are set. Preserve that ordering and the RM support gates;
+no device-ID override or speculative firmware substitution is justified.
+
+ACPI research still needs method bodies for PEGP power/resource dependencies,
+NXHC, and the system-agent display methods, plus independent connector-routing
+evidence. Existing method-name inventories cannot establish whether replacing a
+bridge window or powering down PEGP is safe for the audio/USB functions. No local
+ACPI tables were collected during this source-only work. Do not run AML methods
+or add `_DSM`, `_OFF`, or `_ON` overrides based on the inventory alone.
+
+Run `python3 tools/test_ws75_offline.py` for the seven-suite CPU-only gate. It
+includes a compiled harness using the actual occupancy helper, covering every
+WS75 sibling function, another same-bus slot, subordinate-bus boundaries, the
+GPU self exclusion, unrelated registry objects, iterator release and iterator
+failure. These tests neither build the complete kext nor validate live hardware.
