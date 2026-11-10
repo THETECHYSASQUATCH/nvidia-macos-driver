@@ -82,8 +82,11 @@ bridge window or powering down PEGP is safe for the audio/USB functions. No loca
 ACPI tables were collected during this source-only work. Do not run AML methods
 or add `_DSM`, `_OFF`, or `_ON` overrides based on the inventory alone.
 
-Run `python3 tools/test_ws75_offline.py` for the seven-suite CPU-only gate. It
+Run `python3 tools/test_ws75_offline.py` for the CPU-only gate. It
 includes a compiled harness using the actual occupancy helper, covering every
 WS75 sibling function, another same-bus slot, subordinate-bus boundaries, the
 GPU self exclusion, unrelated registry objects, iterator release and iterator
 failure. These tests neither build the complete kext nor validate live hardware.
+
+See [WS75 Mac build handoff](WS75-MAC-BUILD-HANDOFF.md) for the expanded gate,
+firmware-loader cleanup coverage and missing complete-build prerequisites.

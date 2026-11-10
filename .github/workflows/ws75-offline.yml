@@ -1,0 +1,18 @@
+name: WS75 offline regressions
+
+on:
+  push:
+    branches: [feature/quadro-rtx-4000-support]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run CPU-only WS75 gate
+        run: python3 tools/test_ws75_offline.py

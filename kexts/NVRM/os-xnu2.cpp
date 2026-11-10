@@ -1220,6 +1220,10 @@ static bool nv_xnu_fw_digest_ok(const nv_xnu_fw_expected *e, const void *buf, si
 }
 const void *NV_API_CALL nv_get_firmware(nv_state_t *nv, nv_firmware_type_t fw_type, nv_firmware_chip_family_t fw_chip_family, const void **fw_buf, NvU32 *fw_size)
 {
+    // A failed request must never leave a previous image's address or size visible to RM.
+    if (fw_buf) *fw_buf = NULL;
+    if (fw_size) *fw_size = 0;
+    if (!fw_buf || !fw_size) return NULL;
     const char *path = nv_xnu_fw_path(fw_type, fw_chip_family);
     kprintf("NVRM-xnu: >nv_get_firmware type=%u family=%u -> %s\n", fw_type, fw_chip_family, path);
     if (!path || !*path) return NULL;
