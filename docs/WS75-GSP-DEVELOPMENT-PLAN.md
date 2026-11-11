@@ -89,4 +89,4 @@ GPU self exclusion, unrelated registry objects, iterator release and iterator
 failure. These tests neither build the complete kext nor validate live hardware.
 
 See [WS75 Mac build handoff](WS75-MAC-BUILD-HANDOFF.md) for the expanded gate,
-firmware-loader cleanup coverage and missing complete-build prerequisites.
+firmware-loader cleanup coverage and the reconstructed Darwin archive/kernel build steps.

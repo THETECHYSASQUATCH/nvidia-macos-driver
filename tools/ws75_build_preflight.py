@@ -10,6 +10,10 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "build"))
+from build_nvrm import read_archives
 
 VENDOR_COMMIT = '1a82fbfda8f321b056eb3568850f9316c5e465c5'
 
@@ -56,14 +60,26 @@ def inspect_host():
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--vendor', type=Path)
-    parser.add_argument('--nvrm-builder', type=Path, help='original complete build-nvrm.sh recipe')
+    sources = parser.add_mutually_exclusive_group()
+    sources.add_argument('--vendor', type=Path, help='legacy prepared source-tree inspection; prefer --archives')
+    sources.add_argument('--archives', type=Path, help='output of build/build_darwin_archives.py')
+    parser.add_argument('--nvrm-builder', type=Path, default=Path(__file__).resolve().parents[1] / 'build/build-nvrm.sh',
+                        help='build-only entry point; defaults to the reconstructed in-repository recipe')
     args = parser.parse_args(argv)
-    checks = inspect_host() + inspect_vendor(args.vendor)
+    checks = inspect_host()
+    if args.archives:
+        try:
+            libraries = read_archives(args.archives.resolve())
+            checks.append({'name': 'paired Darwin archives and input hashes', 'ok': True,
+                           'detail': ', '.join(str(p) for p in libraries)})
+        except (OSError, ValueError, KeyError) as exc:
+            checks.append({'name': 'paired Darwin archives and input hashes', 'ok': False, 'detail': str(exc)})
+    else:
+        checks += inspect_vendor(args.vendor)
     builder = args.nvrm_builder
     checks.append({'name': 'complete NVRM build recipe',
                    'ok': bool(builder and builder.is_file() and builder.stat().st_size > 0),
-                   'detail': str(builder) if builder else 'build-nvrm.sh is referenced but absent from this checkout'})
+                   'detail': str(builder) if builder else 'missing build-only entry point'})
     # Existence does not establish that a supplied recipe is correct or safe to run.
     inputs_present = all(check['ok'] for check in checks)
     print(json.dumps({'nvidia_source_commit': VENDOR_COMMIT,

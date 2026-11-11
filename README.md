@@ -155,7 +155,7 @@ sudo ./uninstall.sh && sudo shutdown -r now
 ## Build from source
 
 For the WS75 development branch, see [the Mac build handoff](docs/WS75-MAC-BUILD-HANDOFF.md)
-for offline tests and missing external build inputs before attempting a clean build.
+for offline tests and the reconstructed build-only RM/NVKMS archive and kernel recipes.
 
 Requires Xcode 16, Rust (stable), Meson/Ninja, and NVIDIA's `open-gpu-kernel-modules` at tag `615.78.08`.
 

@@ -1,92 +1,122 @@
 # WS75 Mac build handoff
 
-The current branch is **offline-tested, not a verified complete Mac build**.
-Hardware activation remains deferred. No EFI or security-setting changes are
-needed to run the source tests or compile artifacts into a private build folder.
+The missing RM/NVKMS archive build and NVRM kext recipes are reconstructed.
+The vendor archives have been cross-built on Ubuntu as **1,330 x86_64 Mach-O
+objects**. Both RM-facing local C helpers also cross-compile. The full XNU C++
+compile and final kext links still require verification on your Mac with Apple's
+SDK and linker. This is a build handoff, not hardware compatibility evidence.
+Activation remains deferred.
 
-## Source baseline
+## Build on the Mac
 
-Use `feature/quadro-rtx-4000-support`. The target remains the MSI WS75 10TL,
-TU104GLM Quadro RTX 4000 Max-Q, PCI ID `10DE:1EB6`. The generic RM support gates
-remain authoritative. BAR1 relocation now refuses other PCI functions on the GPU
-bus, including the WS75 audio/USB/USB-C siblings; preserving their window takes
-priority over relocation. This can leave the existing small-BAR fallback active.
+Use this repository's `feature/quadro-rtx-4000-support` branch. Requirements:
+Python 3.9 or newer with `lzma`, Git, GNU make, `patch`, `tar`, and Xcode tools
+selected by `xcrun`. The selected macOS SDK must contain Kernel.framework headers
+and the IOGraphics/IONDRV headers used by the framebuffer. Use the SDK intended
+for the macOS 26 build; the produced code targets x86_64 with minimum macOS 15.
+Apple Silicon Macs can build these x86_64 artifacts; they cannot load them.
 
-The firmware loader clears both caller outputs before processing a request and
-leaves them cleared on every failure. Successful loads transfer the allocated
-buffer to RM until `nv_put_firmware()`. The offline test compiles the actual
-loader against synthetic VFS/allocation/digest functions. It checks cleanup and
-refusal paths and rejects the original stale-output behavior as a negative
-control. It does not exercise the Apple VFS or actual NVIDIA signatures.
-
-## Checks to run now
+Run these commands from the repository root, without `sudo`. Choose new, empty
+output directories. The vendor build output path must not contain spaces or
+shell metacharacters because of NVIDIA's makefiles; the repository path may
+contain spaces. Keep the generated vendor snapshot at its original build path
+because its recorded commands contain absolute paths.
 
 ```sh
 python3 tools/test_ws75_offline.py
-```
-
-The 11 suites cover PCI personalities, RM support gates, GSP log segmentation,
-firmware hash/path auditing, firmware-load failure cleanup, PCI multifunction
-occupancy, scanout limits, copy-class selection, BAR1 sizing/budgets and Turing
-settle timing. The copy-class check uses its embedded RM snapshot unless its
-optional vendor-tree input is present. The GitHub workflow runs this same gate
-on development-branch pushes and manual dispatch; it never activates a driver.
-
-On a Mac with Xcode command line tools, also run:
-
-```sh
 python3 tools/test_card_support.py
+
+git clone --depth 1 --branch 615.78.08 --single-branch \
+  https://github.com/NVIDIA/open-gpu-kernel-modules.git "$HOME/ws75-vendor"
+
+python3 build/build_darwin_archives.py \
+  --vendor "$HOME/ws75-vendor" \
+  --output "$HOME/ws75-build/vendor615" --jobs 4
+
+python3 tools/ws75_build_preflight.py --archives "$HOME/ws75-build/vendor615"
+
+bash build/build-nvrm.sh \
+  --archives "$HOME/ws75-build/vendor615" \
+  --output "$HOME/ws75-build/kexts"
 ```
 
-That additional suite uses Apple frameworks, so it was not run on Ubuntu.
+The archive builder validates the pinned clean NVIDIA checkout and exports it
+into the output directory before patching. It does not modify the original
+checkout. It reuses NVIDIA's per-source include paths and definitions, replaces
+the ELF aggregation with Darwin archives, and embeds freshly compressed shaders
+with Mach-O start/end symbols. Object names are unique across source directories.
+It retains per-object logs, both compile-command formats and
+`darwin-build-proof.json` with source, header, plan, patch, object and archive
+hashes. Build metadata identifies version 615.78.08 without embedding a username
+or hostname.
 
-## Complete build prerequisites still missing
+The kext recipe verifies the paired archive and input hashes, compiles from the
+current repository, and emits:
 
-The public NVIDIA source baseline was independently fetched and inspected:
+- `NVRM.kext`
+- `NVRMFB.kext` from the current `kexts/NVRMFB/fb` source, not the older copy
+  under `kexts/NVRM/fb`
+- `NVRMAGDC.kext`
+- `15/NVAccel.kext` and `26/NVAccel.kext`, using the same shared ABI headers
 
-- Tag: `615.78.08`
-- Peeled source commit: `1a82fbfda8f321b056eb3568850f9316c5e465c5`
-- Source: <https://github.com/NVIDIA/open-gpu-kernel-modules/tree/615.78.08>
+It records the command plan and logs, checks final Mach-O architecture/type and
+plist executable names, and writes `kext-build-proof.json` only after all five
+kexts compile and link. Source changes during the build invalidate the result.
+No script installs, signs, loads or activates a driver or edits boot settings.
+The Metal plugin, translator, Mesa/NVK and firmware packaging remain separate
+upstream components; these commands reconstruct the missing **kernel build**,
+not a complete distributable graphics-driver package.
 
-A clone of that tag alone does **not** provide the inputs used by this checkout's
-existing scripts:
+A failed build leaves its logs for inspection. Use another empty output folder
+for a fresh attempt; stale binaries cannot satisfy a new build. If SDK headers
+are missing, select or supply the correct development SDK before retrying. Do not
+replace missing headers or archives with empty stubs.
 
-- `src/nvidia/_out/Darwin_x86_64/compile_cmds.sh`
-- `src/nvidia/_out/Darwin_x86_64/libnvkernel.a`
-- `src/nvidia-modeset/_out/Darwin_x86_64/compile_cmds.sh`
-- `src/nvidia-modeset/_out/Darwin_x86_64/libnvkms.a`
-- The complete `build-nvrm.sh` recipe referenced by `kexts/NVRM/rmcc.py`.
+## Verification without macOS
 
-The public makefiles produce relocatable kernel objects using GNU linker scripts
-and options; setting `TARGET_OS=Darwin` alone is not a complete Mach-O/archive
-build recipe. The checkout's `build-completion-archive.py` explicitly targets
-610.57.04 and stamps that version into its metadata. Do not use it to manufacture
-a supposedly paired 615 archive without porting and validating the patches and
-metadata. Firmware identity checks do not prove the RM and NVKMS archives match.
-
-These missing build steps must be recovered from the upstream build environment
-or reconstructed and validated on macOS. No placeholder library or unverified
-linker recipe has been substituted. Existing plugin/NVK build scripts also use
-upstream-specific home-directory paths; they are not a one-command clean-machine
-build system.
-
-## Read-only Mac preflight
+On Linux with Clang and LLVM ar, the same vendor steps can be checked with:
 
 ```sh
-python3 tools/ws75_build_preflight.py \
-  --vendor /absolute/path/to/prepared-nvidia-615.78.08 \
-  --nvrm-builder /absolute/path/to/build-nvrm.sh
+python3 build/build_darwin_archives.py \
+  --vendor /absolute/path/to/clean-nvidia-source \
+  --output /tmp/ws75-darwin-archives --jobs 4 --cross-archives
+
+WS75_ARCHIVE_BUILD=/tmp/ws75-darwin-archives python3 tools/test_ws75_offline.py
 ```
 
-This checks host tools, Kernel.framework headers, vendor version and required
-file presence. It runs no supplied build script and writes no system files. Exit
-1 means inputs are missing; exit 0 means the checked inputs exist, **not** that
-they are authentic, ABI-compatible or successfully built. The JSON always leaves
-`build_verified` false. No NVIDIA firmware is downloaded or installed by it.
+The optional integration check verifies the complete archive proof and compiles
+`nvrm_pageoff.c` and `nvrm_kapi_fields.c` with the actual recorded vendor commands.
+Without `WS75_ARCHIVE_BUILD`, that integration check is explicitly skipped; the
+other offline tests still run, including synthetic Mach-O shader/archive checks
+and refusal of changed archive/header/command-plan inputs. The GitHub workflow
+runs the offline gate; it does not fetch and compile the full NVIDIA tree.
 
-After the build recipe is available, compile the matched NVRM/NVRMFB/NVAccel
-components from one revision and record compiler/SDK versions, logs and artifact
-SHA-256 hashes. Rebuild both supported NVAccel variants whenever shared ABIs
-change. A successful full Mac compile/link is the next required verification;
-only then assess separate hardware validation. ACPI method bodies, connector
-routing and sibling power dependencies remain unverified.
+To inspect a Mac command plan without compiling, use `--plan-only --sdk
+/absolute/path/to/MacOSX.sdk` with `build/build-nvrm.sh`. A plan does not count as
+a verified build. `ws75_build_preflight.py` is also read-only and never executes
+a supplied build recipe. Its `inputs_present` result is distinct from successful
+compilation; it always leaves `build_verified` false.
+
+## Source baseline and safeguards
+
+NVIDIA tag `615.78.08` resolves to source commit
+`1a82fbfda8f321b056eb3568850f9316c5e465c5`:
+<https://github.com/NVIDIA/open-gpu-kernel-modules/tree/615.78.08>.
+The new builder rejects other commits and tracked or untracked source changes.
+
+Version-specific patches enable Darwin in the Unix version-header guards,
+provide the 615 flip-completion callback and notifier reset behavior, clear a
+cancelled OS-timer handle, and apply the existing mode-refusal, backlight logging
+and viewport-scaling changes. NVIDIA 615 already guards and clears the FSP poll
+event; the old 610 FSP patch is not applied again. The legacy
+`build-completion-archive.py` remains a 610-specific tool and is not called.
+
+The target remains TU104GLM Quadro RTX 4000 Max-Q (`10DE:1EB6`) on the MSI WS75.
+RM support gates remain authoritative. BAR1 relocation refuses same-bus PCI
+siblings, and firmware-load failures clear output metadata and release buffers.
+No device-ID support override or firmware substitution was introduced.
+
+ACPI method bodies, physical connector routing, sibling power dependencies and
+actual GSP startup remain unverified. Complete the Mac build and review its logs
+before considering a separately authorized hardware-validation phase. Ubuntu
+drivers, OpenCore EFI, SIP, AMFI and Secure Boot are outside this build workflow.

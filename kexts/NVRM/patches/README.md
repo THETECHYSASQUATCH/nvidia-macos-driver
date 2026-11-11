@@ -21,3 +21,26 @@ Link NVRM against the resulting `libnvkms.a`, not the original archive. The scri
 ## RM boot-failure cleanup
 
 `610-fsp-timer-double-destroy.patch` applies to the open-gpu-kernel-modules 610.57.04 tree (`git apply` from its root) before the RM objects are built. When the FSP boot commands fail, `kfspCleanupBootState` runs from both the failure path and `kfspStateDestroy`; the second `tmrEventDestroy` faulted on the freed OS timer (page fault at 0x1010 in `nv_destroy_nano_timer`). The patch destroys the poll event once and clears the OS timer handle after cancelling it.
+
+## Reconstructed 615.78.08 Darwin build
+
+Use `build/build_darwin_archives.py` followed by `build/build-nvrm.sh` as documented
+in `docs/WS75-MAC-BUILD-HANDOFF.md`. The new pipeline exports a pinned clean tree
+and applies patches only to that private snapshot. It does not invoke the
+610-only completion builder above.
+
+- `615-darwin-version.patch` adds Darwin to the vendor Unix version-header guards;
+  the compiler still selects Apple's target ABI, with `NV_UNIX` explicitly enabled
+  for the existing Unix OS abstraction.
+- `615-display-completion.patch` ports the notifier resets and flip-pending
+  callback to 615's KAPI source layout. The callback member already exists in
+  that release's interface. This patch is compiled into the paired modeset archive.
+- `615-timer-handle-clear.patch` clears the cancelled OS-timer handle. The FSP
+  poll-event null check/clear from the 610 patch is already upstream in 615.
+- The existing mode-refusal, backlight-register logging and 615 viewport-scaling
+  patches apply in sequence with zero fuzz. Offsets are allowed; rejected hunks
+  stop the build.
+
+Cross-compilation verifies source/ABI compilation and Mach-O archive construction;
+it does not establish that an XNU kext links or boots. Keep that distinction in
+build reports.

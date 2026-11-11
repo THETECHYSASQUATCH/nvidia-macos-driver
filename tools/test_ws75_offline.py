@@ -7,6 +7,7 @@ import sys
 TOOLS = Path(__file__).resolve().parent
 TESTS = (
     'test_ws75_quadro.py',
+    'test_ws75_build.py',
     'test_ws75_gsp_triage.py',
     'test_ws75_firmware_audit.py',
     'test_pcie_multifunction.py',
